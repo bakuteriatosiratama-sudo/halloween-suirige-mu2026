@@ -24,9 +24,37 @@ const list=state.tab==='rooms'?D.rooms:D.testimonies,found=state.unlocked.filter
 function renderDetail(){let x=byId[state.detail];commonBack(()=>navigate('list',{restore:true}));if(!x){main.append(el('p','','情報が見つかりません。'));return}let paper=el('article','paper'+(x.special?' special-paper':''));paper.append(el('h2','',x.title));if(x.text)paragraphText(paper,x.text);else x.lines.forEach(line=>{let d=el('div','dialogue'+(x.special?' special':''));d.append(el('div','speaker',line.speaker));paragraphText(d,line.text);paper.append(d)});main.append(paper)}
 function renderPerson(){let p=D.people[state.person];commonBack(()=>navigate('list',{restore:true}));let hero=el('div','character-hero'),img=el('img');img.src='assets/'+p.image+'.webp';img.alt=p.costume+'のアイコン';let name=el('div');add(name,el('h2','',p.name),el('small','',p.costume));add(hero,img,name);main.append(hero);header('所持品',p.items.length+'件');let wrap=el('div','stack');p.items.forEach((x,i)=>wrap.append(listTile(x.title,'詳細を見る',()=>navigate('item',{person:state.person,item:i}))));main.append(wrap)}
 function renderItem(){let p=D.people[state.person],x=p.items[state.item];commonBack(()=>navigate('person',{person:state.person}));let paper=el('article','paper');paper.append(el('h2','',x.title));paragraphText(paper,x.text);main.append(paper)}
-function renderScan(){commonBack(()=>navigate('list',{restore:true}));header('QRコードを読み取る','');let box=el('div','paper');box.append(el('p','muted','現地のQRコードをカメラに映してください。カメラが利用できない場合は、QRコードに書かれた解放コードを入力できます。'));let holder=el('div','video-wrap'),video=el('video');video.autoplay=true;video.muted=true;video.playsInline=true;holder.append(video,el('div','scan-outline'));box.append(holder);let status=el('p','muted small','カメラを起動しています…');box.append(status);let code=el('input');code.placeholder='例：room-01';code.setAttribute('aria-label','解放コード');box.append(code,button('コードで解放','secondary',()=>unlock(code.value)));main.append(box);
-if(!navigator.mediaDevices?.getUserMedia){status.textContent='カメラが利用できません。HTTPSで公開して開いてください。';return}
-(async()=>{try{let stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});if(state.view!=='scan'){stream.getTracks().forEach(t=>t.stop());return}state.scanner=stream;video.srcObject=stream;await video.play();let detector=null;if('BarcodeDetector'in window){try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){}}if(!detector){status.textContent='このブラウザは内蔵QR読み取りに対応していません。QRを通常のカメラで開くか、解放コードを入力してください。';return}status.textContent='QRコードをカメラの枠内に合わせてください。';const tick=async()=>{if(state.view!=='scan'||!state.scanner)return;try{let found=await detector.detect(video);if(found.length&&unlock(found[0].rawValue))return}catch(e){}setTimeout(tick,250)};tick()}catch(e){status.textContent='カメラを起動できませんでした。ブラウザのカメラ許可とHTTPS接続をご確認ください。'}})()}
+function renderScan(){
+ commonBack(()=>navigate('list',{restore:true}));header('QRコードを読み取る','');
+ let box=el('div','paper');box.append(el('p','muted','QRコードを枠内に映してください。読み取れない場合は、通常のカメラでQRを開くか、解放コードを入力してください。'));
+ let holder=el('div','video-wrap'),video=el('video');video.autoplay=true;video.muted=true;video.playsInline=true;holder.append(video,el('div','scan-outline'));box.append(holder);
+ let status=el('p','muted small','カメラを起動しています…');box.append(status);
+ let code=el('input');code.placeholder='例：testimony-05';code.setAttribute('aria-label','解放コード');box.append(code,button('コードで解放','secondary',()=>unlock(code.value)));main.append(box);
+ if(!navigator.mediaDevices?.getUserMedia){status.textContent='カメラを利用できません。HTTPS接続とカメラの許可を確認してください。';return}
+ (async()=>{try{
+  let stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+  if(state.view!=='scan'){stream.getTracks().forEach(t=>t.stop());return}
+  state.scanner=stream;video.srcObject=stream;await video.play();
+  let detector=null;if('BarcodeDetector'in window){try{detector=new BarcodeDetector({formats:['qr_code']})}catch(e){}}
+  let canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
+  status.textContent='QRコードをカメラの枠内に合わせてください。';
+  let attempts=0;
+  const tick=async()=>{
+   if(state.view!=='scan'||!state.scanner)return;
+   try{
+    let raw=null;
+    if(detector){let found=await detector.detect(video);if(found.length)raw=found[0].rawValue}
+    if(!raw&&typeof window.jsQR==='function'&&video.readyState>=2){
+     let w=video.videoWidth,h=video.videoHeight;
+     if(w&&h){let scale=Math.min(1,640/w);canvas.width=Math.round(w*scale);canvas.height=Math.round(h*scale);ctx.drawImage(video,0,0,canvas.width,canvas.height);let pixels=ctx.getImageData(0,0,canvas.width,canvas.height);let found=window.jsQR(pixels.data,canvas.width,canvas.height,{inversionAttempts:'attemptBoth'});if(found)raw=found.data}
+    }
+    if(raw&&unlock(raw))return;
+    if(++attempts===20&&!detector&&typeof window.jsQR!=='function')status.textContent='QR読み取りライブラリを読み込めませんでした。通信状態を確認するか、通常のカメラでQRを開いてください。';
+   }catch(e){}
+   setTimeout(tick,250)
+  };tick();
+ }catch(e){status.textContent='カメラを起動できませんでした。ブラウザのカメラ許可とHTTPS接続をご確認ください。'} })()
+}
 function renderPhone(){commonBack(()=>navigate('list',{restore:true}));header('電話','');if(!phoneReady()){main.append(el('p','muted','電話はまだ使用できません。『使用人の証言③』を確認してください。'));return}let panel=el('div','phone-screen'),p=el('p','muted center','調査で見つけた電話番号を入力してください。'),num=el('input','phone-number');num.type='tel';num.inputMode='tel';num.placeholder='電話番号';panel.append(p,num);let msg=el('p','muted center small','');panel.append(button('☎ 電話をかける','primary',()=>{const digits=num.value.replace(/[^0-9]/g,'');if(!digits){msg.textContent='電話番号を入力してください。';return}const id=C.phoneNumbers[digits];if(!id||!byId[id]){msg.textContent='おかけになった電話番号は現在使われておりません。';return}if(!state.unlocked.includes(id))state.unlocked.unshift(id);persist();toast('電話で新しい証言を入手しました！');state.tab='testimonies';navigate('detail',{detail:id})}));panel.append(msg);main.append(panel)}
 function renderDeduce(){commonBack(()=>navigate('list',{restore:true}));header('真相解明','');let paper=el('div','paper');paper.append(el('p','muted','事件の真相を推理して回答してください。'));let fields=[['犯人の名前','text'],['犯行手口','textarea'],['現在宝石が隠されているところは？','text']],inputs=[];fields.forEach(([label,type])=>{let f=el('div','field'),l=el('label','',label),i=el(type==='textarea'?'textarea':'input');i.placeholder=label;i.setAttribute('aria-label',label);if(type==='text')i.type='text';add(f,l,i);paper.append(f);inputs.push(i)});let error=el('p','error');paper.append(error);paper.append(button('推理を回答する','primary',()=>{let [n,m,p]=inputs.map(x=>x.value.trim());if(!n||!m||!p){error.textContent='3つの項目をすべて入力してください。';return}if(!['サフィール','さふぃーる','焔サフィール'].includes(n)){error.textContent='和問：惜しいようですが、正解ではないようです。';return}state.solved=true;persist();navigate('ending')}));main.append(paper)}
 function renderEnding(){if(!state.solved){navigate('deduce');return}header('真相解明成功！','');main.append(el('div','ending-title','✦ エンディング ✦'));let content=el('div');D.ending.forEach((line,i)=>{if(line.speaker==='scene'){content.append(el('div','scene',line.text));return}let row=el('div','story-row'+(line.speaker==='焔'?' homura':'')),img=el('img');img.src='assets/'+(line.speaker==='焔'?'homura':'wakato')+'.webp';img.alt=line.speaker;let bubble=el('div','story-bubble');bubble.append(el('b','',line.speaker),el('p','',line.text));add(row,img,bubble);content.append(row)});main.append(content);let reward=el('div','reward','🎁 真相解明の報酬に缶バッチがもらえるから、ぜひ貰ってくれ！');main.append(reward,button('情報一覧に戻る','secondary',()=>navigate('list')))}
