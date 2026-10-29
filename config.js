@@ -32,7 +32,11 @@ window.GAME_CONFIG = {
   "testimony-05": "DDYQ4P",
   "testimony-06": "S2SLCG",
   "testimony-07": "QW2AJ9",
-  "testimony-08": "YG94PS"
+  "testimony-08": "YG94PS",
+  "testimony-09": "2X7E78",
+  "testimony-10": "4HBYTN",
+  "testimony-11": "ZV8SJN",
+  "testimony-12": "Q6EM76"
 },
   phoneNumbers: {"09073929953": "testimony-07"},
   // true にすると初回からすべての所持品を表示。所持品のQRロック方式が未確定なので初期値は true。
