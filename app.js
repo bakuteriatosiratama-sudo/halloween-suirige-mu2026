@@ -4,6 +4,7 @@ const storeKey='halloween-gem-v1';let saved={};try{saved=JSON.parse(localStorage
 const state={unlocked:Array.isArray(saved.unlocked)?saved.unlocked:[],notebookRead:!!saved.notebookRead,solved:!!saved.solved,tab:'rooms',view:'list',person:null,item:null,detail:null,scrolls:{},scanner:null};
 const phoneReady=()=>state.unlocked.includes('testimony-05');
 const all=[...D.rooms,...D.testimonies],byId=Object.fromEntries(all.map(x=>[x.id,x]));
+const codeToId=Object.fromEntries(Object.entries(C.unlockCodes).map(([id,code])=>[code,id]));
 const persist=()=>{try{localStorage.setItem(storeKey,JSON.stringify({unlocked:state.unlocked,notebookRead:state.notebookRead,solved:state.solved}))}catch(e){}};
 const el=(tag,cls,txt)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n};
 const add=(parent,...children)=>{children.forEach(c=>parent.append(c));return parent};
@@ -13,7 +14,7 @@ function paragraphText(target,text){const pieces=text.split(/(?<=。)/u);pieces.
 function stopScan(){if(state.scanner){state.scanner.getTracks().forEach(t=>t.stop());state.scanner=null}}
 function navigate(view='list',opts={}){stopScan();if(state.view==='list'&&view!=='list')state.scrolls[state.tab]=window.scrollY;state.view=view;state.detail=opts.detail||null;state.person=opts.person??state.person;state.item=opts.item??null;render();if(view==='list'&&opts.restore)window.scrollTo(0,state.scrolls[state.tab]||0);else window.scrollTo(0,0)}
 function setTab(tab){state.tab=tab;state.person=null;state.item=null;navigate('list')}
-function unlock(raw){let val=String(raw||'').trim();try{const u=new URL(val,location.href);val=u.searchParams.get('unlock')||val}catch(e){};if(!byId[val]){toast('このQRコードは登録されていません。');return false}if(byId[val].special){toast('この証言は電話で入手できます。');return false}const fresh=!state.unlocked.includes(val);if(fresh)state.unlocked.unshift(val);persist();if(fresh)toast('新しい情報を入手しました！');else toast('この情報は入手済みです。');state.tab=val.startsWith('room-')?'rooms':'testimonies';navigate('detail',{detail:val});return true}
+function unlock(raw){let val=String(raw||'').trim();try{const u=new URL(val,location.href);val=u.searchParams.get('unlock')||val}catch(e){};const id=codeToId[val.toUpperCase()];if(!id){toast('この解放コードは登録されていません。');return false}if(byId[id].special){toast('この証言は電話で入手できます。');return false}val=id;const fresh=!state.unlocked.includes(val);if(fresh)state.unlocked.unshift(val);persist();if(fresh)toast('新しい情報を入手しました！');else toast('この情報は入手済みです。');state.tab=val.startsWith('room-')?'rooms':'testimonies';navigate('detail',{detail:val});return true}
 function commonBack(fn){main.append(button('← 戻る','back',fn))}
 function header(title,count){let h=el('div','section-head');add(h,el('h2','',title),el('span','count',count));main.append(h)}
 function listTile(title,subtitle,fn,extra){let b=button('','tile'+(extra?.locked?' locked':''),fn);if(extra?.image){let img=el('img','mini-icon');img.src='assets/'+extra.image+'.webp';img.alt='';b.append(img)}else b.append(el('span','',extra?.locked?'🔒':'✦'));let label=el('span','tile-title',title);if(subtitle)label.append(el('span','hint',subtitle));if(extra?.special)label.append(el('span','pill','特別な証言'));add(b,label,el('span','chevron','›'));return b}
@@ -29,7 +30,7 @@ function renderScan(){
  let box=el('div','paper');box.append(el('p','muted','QRコードを枠内に映してください。読み取れない場合は、通常のカメラでQRを開くか、解放コードを入力してください。'));
  let holder=el('div','video-wrap'),video=el('video');video.autoplay=true;video.muted=true;video.playsInline=true;holder.append(video,el('div','scan-outline'));box.append(holder);
  let status=el('p','muted small','カメラを起動しています…');box.append(status);
- let code=el('input');code.placeholder='例：testimony-05';code.setAttribute('aria-label','解放コード');box.append(code,button('コードで解放','secondary',()=>unlock(code.value)));main.append(box);
+ let code=el('input');code.placeholder='6文字の解放コード';code.setAttribute('aria-label','解放コード');box.append(code,button('コードで解放','secondary',()=>unlock(code.value)));main.append(box);
  if(!navigator.mediaDevices?.getUserMedia){status.textContent='カメラを利用できません。HTTPS接続とカメラの許可を確認してください。';return}
  (async()=>{try{
   let stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
@@ -60,6 +61,6 @@ function renderDeduce(){commonBack(()=>navigate('list',{restore:true}));header('
 function renderEnding(){if(!state.solved){navigate('deduce');return}header('真相解明成功！','');main.append(el('div','ending-title','✦ エンディング ✦'));let content=el('div');D.ending.forEach((line,i)=>{if(line.speaker==='scene'){content.append(el('div','scene',line.text));return}let row=el('div','story-row'+(line.speaker==='焔'?' homura':'')),img=el('img');img.src='assets/'+(line.speaker==='焔'?'homura':'wakato')+'.webp';img.alt=line.speaker;let bubble=el('div','story-bubble');bubble.append(el('b','',line.speaker),el('p','',line.text));add(row,img,bubble);content.append(row)});main.append(content);let reward=el('div','reward','🎁 真相解明の報酬に缶バッチがもらえるから、ぜひ貰ってくれ！');main.append(reward,button('情報一覧に戻る','secondary',()=>navigate('list')))}
 function render(){main.replaceChildren();document.querySelectorAll('.nav').forEach(b=>{b.classList.toggle('active',b.dataset.tab===state.tab);b.setAttribute('aria-current',b.dataset.tab===state.tab?'page':'false')});document.getElementById('phoneBtn').hidden=!phoneReady();switch(state.view){case'list':renderList();break;case'detail':renderDetail();break;case'person':renderPerson();break;case'item':renderItem();break;case'scan':renderScan();break;case'phone':renderPhone();break;case'deduce':renderDeduce();break;case'ending':renderEnding();break;default:renderList()}}
 document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));document.getElementById('homeBtn').addEventListener('click',()=>navigate('list'));document.getElementById('phoneBtn').addEventListener('click',()=>navigate('phone'));document.getElementById('deduceBtn').addEventListener('click',()=>navigate('deduce'));
-// URL に ?unlock=room-01 などを付けた QR を読み込むと自動で解放する。
+// URL に ?unlock=6文字の解放コードを付けた QR を読み込むと自動で解放する。
 const params=new URLSearchParams(location.search),id=params.get('unlock');if(id){history.replaceState(null,'',location.pathname+location.hash);setTimeout(()=>unlock(id),80)}render();
 })();
